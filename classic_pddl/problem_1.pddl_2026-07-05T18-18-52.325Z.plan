@@ -1,0 +1,4 @@
+0.00000: (move_sun rob1 dock site_a)
+1.00000: (inspect_sun rob1 site_a panel_1 camera)
+2.00000: (move_sun rob1 site_a dock)
+3.00000: (upload_data rob1 dock)
