@@ -28,7 +28,6 @@
         
         ; which sensor is required for which task
         (requires_sensor ?c - components ?s - sensors)
-
         ; if the robot has the hardware to do the task
         (has_sensor ?r - robot ?s - sensors)
 
@@ -42,6 +41,10 @@
         ; sun
         (sun_present_between ?l1 ?l2 - location)
         (sun_present ?l - location)
+
+        ; for the processes
+        (transit ?r - robot ?l1 ?l2 - location)
+        (inspecting ?r - robot ?c - components ?s - sensors)
 
         (daytime)
     )
@@ -85,15 +88,19 @@
         :duration (= ?duration (travel_time ?now ?go))
 
         :condition (and 
+            (over all (not(robot_disabled ?r)))
+
             (at start (not (needs_inspection ?r)))
             (at start (robot_at ?r ?now))
             (at start (location_reachable ?now ?go))
-            (at start (>= (battery_level ?r) (movement_cost ?r)))
-            (over all (not(robot_disabled ?r)))
+
+            (at start (>= (battery_level ?r) (* (travel_time ?now ?go) (movement_cost ?r))))
         )
         :effect (and 
             ; update the spatial location and resources 
             (at start (not (robot_at ?r ?now)))
+            
+            (at start (transit ?r ?now ?go))
 
             (at start (decrease (battery_level ?r) (* (travel_time ?now ?go)(movement_cost ?r))))
 
@@ -112,8 +119,8 @@
                 (when (and (daytime) (or 
                         (and (sun_present ?now) (not(sun_present ?go)))
                         (and (not(sun_present ?now)) (sun_present ?go))
-                      )
-                    (assign (sun_exposure ?r) 0.2))
+                    ))
+                    (assign (sun_exposure ?r) 0.2)
                 )
             )
 
@@ -128,6 +135,7 @@
             ; we arrive to our new location
             (at end (robot_at ?r ?go))
             (at end (needs_inspection ?r))
+            (at end (not (in_transit ?r ?now ?go)))
 
             (at end (when (and (daytime) (sun_present ?go))
                 (assign (sun_exposure ?r) 2)))
@@ -235,6 +243,39 @@
             (increase (orbit_time) (* #t 1))
         )
     )
+
+    ; we drain battery drainage for movement
+    (:process drain_battery
+        :parameters (
+            ?r - robot
+            ?now ?go - location
+        )
+        :precondition (transit ?r ?now ?go)
+        :effect (and
+            (decrease (battery_level ?r) (* #t (movement_cost ?r)))
+        )
+    )
+
+    ; data collection and battery drainage for it
+    (:process collect_data
+        :parameters (
+            ?r - robot
+            ?c - components
+            ?s - sensors
+        )
+        :precondition (inspecting ?r ?c ?s)
+        :effect (and
+            (decrease (battery_level ?r) 
+                (* #t (/ (inspection_cost ?s) (inspection_time ?c)))
+            )
+
+            (increase (storage_used ?r) 
+                (* #t (/ (data_size ?c) (inspection_time ?c)))
+            )
+        )
+    )
+    
+    
     
 
     ;! Events
