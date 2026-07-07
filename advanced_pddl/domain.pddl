@@ -8,6 +8,7 @@
         :time
         :durative-actions
         :continuous-effects
+        :disjunctive-preconditions
     )
 
     (:types
@@ -34,12 +35,12 @@
         ; track the state of the mission
         (checked_component ?r - robot ?c - components ?l - location)
         (data_stored ?c - components)
+        (uploading ?r - robot)
 
         ; locking/unlocking movement
         (needs_inspection ?r - robot)
 
         ; sun
-        (sun_present_between ?l1 ?l2 - location)
         (sun_present ?l - location)
 
         ; for the processes
@@ -47,17 +48,20 @@
         (inspecting ?r - robot ?c - components ?s - sensors)
 
         (daytime)
+        (transmit_window_open)
     )
 
     
     ;? here we store the resurces
-    (:functions
+    (:functions 
         (orbit_time)
+        (orbit_index)
+        (solar_factor)
 
         ; fraction of max_charge_rate available given current sun exposure
-        ; 0    - full shade, no charging
-        ; 0.2  - grazing/transitional exposure (~30-90 degrees off-axis)
-        ; 0.8  - direct sun exposure (within ~30 degrees)
+        ; 0 - full shade, no charging
+        ; 1 - going from light to shaded and vice versa. So 50% of the road in shade and 50 in light
+        ; 2  - direct sun exposure 
         (sun_exposure ?r - robot)      
 
         ; battery
@@ -70,11 +74,14 @@
         (movement_cost ?r - robot)  ; the movement cost is constant as it is the robots motors
         (inspection_cost ?s - sensors)
         (inspection_time ?c - components)
+        (upload_cost ?r - robot)
 
         ; storage  
+        (upload_rate ?r - robot)
         (data_size ?c - components)
         (storage_used ?r - robot)
         (storage ?r - robot)
+        
     )
 
 
@@ -142,7 +149,6 @@
             (at end (not (needs_inspection ?r)))
         )
     )
-        
     
     ;! We specify a wait action which allows the robot to charge. But does nothing else
     (:durative-action wait
@@ -154,7 +160,6 @@
         :condition (and 
             (over all (robot_at ?r ?l))
             (over all  (not (needs_inspection ?r)))
-            (over all (> (sun_exposure ?r) 0))
         )
         :effect (and)
     )
@@ -169,23 +174,26 @@
         )
     )
 
-        
+
     ;! the data is uploaded when we reach the docker
-    (:action upload_data
-        :parameters (
-            ?r - robot 
-            ?d - docking
-            
-        )
-        :precondition (and
+    (:action start_upload
+        :parameters (?r - robot ?d - docking)
+        :precondition (and 
             (robot_at ?r ?d)
-            (not(robot_disabled ?r))
+            (not (uploading ?r))
+            (> (storage_used ?r) 0)
+            (not (robot_disabled ?r))
         )
-        :effect (and
-            (assign (storage_used ?r) 0)
-        )
+        :effect (uploading ?r)
     )
 
+    (:action stop_upload
+        :parameters (?r - robot)
+        :precondition (uploading ?r)
+        :effect (not (uploading ?r))
+    )
+
+    
     ;! Process
     (:process charge
         :parameters (
@@ -196,7 +204,7 @@
             (< (battery_level ?r) (max_battery_level ?r))
         )
         :effect (increase (battery_level ?r) 
-            (* #t (* (sun_exposure ?r) (max_charge_rate ?r)))
+            (* #t (* (/ (sun_exposure ?r) 2) (* (solar_factor) (max_charge_rate ?r))))
         )
     )
 
@@ -221,7 +229,7 @@
         )
     )
 
-    ; data collection and battery drainage for it
+    ; data collection / transmission and battery drainage for it
     (:process collect_data
         :parameters (
             ?r - robot
@@ -242,21 +250,48 @@
             )
         )
     )
+
+    (:process transmit_data
+        :parameters (
+            ?r - robot
+            ?d - docking
+        )
+        :precondition (and 
+            (uploading ?r)
+            (not (robot_disabled ?r))
+            (transmit_window_open)
+            (robot_at ?r ?d)
+        )
+        :effect (and
+            (decrease (storage_used ?r) (* #t (upload_rate ?r)))
+            (decrease (battery_level ?r) (* #t (upload_cost ?r)))
+        )
+    )
+
+    ; sunrise
+    (:process solar_intensity_rise
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (< (orbit_time) 22.5)   ; bc the iss has 45 mins of light
+        )
+        :effect (increase (solar_factor) (* #t (/ 1 22.5))) 
+    )
+
+    ; sunset
+    (:process solar_intensity_fall
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 22.5)
+        )
+        :effect (decrease (solar_factor) (* #t (/ 1 22.5)))
+    )
     
     
     
 
     ;! Events
-    (:event battery_cap
-        :parameters (
-            ?r - robot
-        )
-
-        :precondition (> (battery_level ?r) (max_battery_level ?r))
-
-        :effect (assign (battery_level ?r) (max_battery_level ?r))
-    )
-
     (:event dead
         :parameters (?r - robot)
 
@@ -269,13 +304,14 @@
     )
     
 
-    ;! handling the day - night cycle
+    ;! global change of time 
     (:event day_ends
         :parameters ()
         :precondition (and (daytime) (>= (orbit_time) 45))
         :effect (and
             (not (daytime))
             (assign (orbit_time) 0)
+            (assign (solar_factor) 0)
         )
     )
 
@@ -285,98 +321,53 @@
         :effect (and
             (daytime)
             (assign (orbit_time) 0)
+            (assign (solar_factor) 0)
+            (increase (orbit_index) 1)
         )
     )
 
-    ; update to shade when night comes
+    ; 90 mins per full orbit. 22.5 degree longitufe shift per orbit. In one day we have 16 orbits
+    (:event wrap_orbit_idx
+        :parameters ()
+        :precondition (>= (orbit_index) 16)
+        :effect (assign (orbit_index) 0)    ; new day
+    )
+    
+
+
+    ;! Light situation for the robot
+    ;? during the night we have shade everywhere
     (:event update_exposure_night
         :parameters (?r - robot)
-        :precondition (and (not (daytime)) (> (sun_exposure ?r) 0))
+        :precondition (and (not (daytime)) (not (= (sun_exposure ?r) 0)))
         :effect (assign (sun_exposure ?r) 0)
     )
 
-    ; if the robot stationary and it is the peak of the sun
-    (:event update_exposure_day_stationary_peak
-        :parameters (?r - robot ?l - location)
-        :precondition (and 
-            (daytime) 
-            (robot_at ?r ?l) 
-            (sun_present ?l)
-            (>= (orbit_time) 15) 
-            (< (orbit_time) 30)
-            (< (sun_exposure ?r) 0.75) 
-        )
-        :effect (assign (sun_exposure ?r) 0.8)
-    )
-
-    ; stationary and the sun is slanted
-    (:event update_exposure_day_stationary_slanted
-        :parameters (?r - robot ?l - location)
-        :precondition (and 
-            (daytime) 
-            (robot_at ?r ?l) 
-            (sun_present ?l)
-            (or (< (orbit_time) 15) (>= (orbit_time) 30))
-            (or (> (sun_exposure ?r) 0.25) (< (sun_exposure ?r) 0.15))
-        )
-        :effect (assign (sun_exposure ?r) 0.2)
-    )
-
-    ; if the robot is moving and the sun is at the peak
-    (:event update_exposure_day_transit_full_peak
-        :parameters (?r - robot ?now ?go - location)
-        :precondition (and 
-            (daytime) 
-            (transit ?r ?now ?go) 
-            (sun_present ?now) 
-            (sun_present ?go) 
-            (>= (orbit_time) 15) 
-            (< (orbit_time) 30)
-            (< (sun_exposure ?r) 0.75) ; we are making it 0.75 instead of 0.8 to avoid floating point precision errors
-        )
-        :effect (assign (sun_exposure ?r) 0.8)
-    )
-
-    ; moving but slanted
-    (:event update_exposure_day_transit_full_slanted
-        :parameters (?r - robot ?now ?go - location)
-        :precondition (and 
-            (daytime) 
-            (transit ?r ?now ?go) 
-            (sun_present ?now) 
-            (sun_present ?go) 
-            (or (< (orbit_time) 15) (>= (orbit_time) 30))
-            (or (> (sun_exposure ?r) 0.25) (< (sun_exposure ?r) 0.15))
-        )
-        :effect (assign (sun_exposure ?r) 0.2)
-    )
-
-    ; if the robot is moving from/to a shaded place to a light one
-    (:event update_exposure_day_partial
-        :parameters (?r - robot ?now ?go - location)
-        :precondition (and 
-            (daytime) 
-            (transit ?r ?now ?go)
-            (or (and (sun_present ?now) (not (sun_present ?go)))
-                (and (not (sun_present ?now)) (sun_present ?go)))
-            (or (> (sun_exposure ?r) 0.25) (< (sun_exposure ?r) 0.15)) 
-        )
-        :effect (assign (sun_exposure ?r) 0.2)
-    )
-
-    ; there is day but the robot is in a perpetual shaded part of the map
+    ;? if the robot stationary and it is in the shade
     (:event update_exposure_day_shade
         :parameters (?r - robot ?l - location)
         :precondition (and 
             (daytime) 
             (robot_at ?r ?l) 
             (not (sun_present ?l))
-            (> (sun_exposure ?r) 0)
+            (not (= (sun_exposure ?r) 0))
         )
         :effect (assign (sun_exposure ?r) 0)
     )
 
-    ; going between two shaded places
+    ;? stationary and there is sun
+    (:event update_exposure_day_full_sun
+        :parameters (?r - robot ?l - location)
+        :precondition (and 
+            (daytime) 
+            (robot_at ?r ?l) 
+            (sun_present ?l)
+            (not (= (sun_exposure ?r) 2)) 
+        )
+        :effect (assign (sun_exposure ?r) 2)
+    )
+
+    ;? if the robot is moving from shade to shade
     (:event update_exposure_day_transit_shade
         :parameters (?r - robot ?now ?go - location)
         :precondition (and 
@@ -384,8 +375,74 @@
             (transit ?r ?now ?go) 
             (not (sun_present ?now)) 
             (not (sun_present ?go)) 
-            (> (sun_exposure ?r) 0)
+            (not (= (sun_exposure ?r) 0))
         )
         :effect (assign (sun_exposure ?r) 0)
     )
+
+    ;? moving from light to light
+    (:event update_exposure_day_transit_full
+        :parameters (?r - robot ?now ?go - location)
+        :precondition (and 
+            (daytime) 
+            (transit ?r ?now ?go) 
+            (sun_present ?now) 
+            (sun_present ?go) 
+            (not (= (sun_exposure ?r) 2))
+        )
+        :effect (assign (sun_exposure ?r) 2)
+    )
+
+    ;? if the robot is moving from/to a shaded place to a light one
+    (:event update_exposure_day_transit_partial
+        :parameters (?r - robot ?now ?go - location)
+        :precondition (and 
+            (daytime) 
+            (transit ?r ?now ?go)
+            (or (and (sun_present ?now) (not (sun_present ?go)))
+                (and (not (sun_present ?now)) (sun_present ?go)))
+            (not (= (sun_exposure ?r) 1)) 
+        )
+        :effect (assign (sun_exposure ?r) 1)
+    )
+
+
+    ;! transmision
+
+    ;? usa has spans 60 degrees. So if we assume that we start immediately above it we will continue to be in it for 3 orbits
+    (:event comm_window_starts
+        :parameters ()
+        :precondition (and 
+            (not (transmit_window_open)) 
+            (<= (orbit_index) 2)             
+            (>= (orbit_time) 15)     ; we assume that the iss is above USA for 10 mins
+            (< (orbit_time) 25)
+        )
+        :effect (transmit_window_open)
+    )
+
+    (:event comm_window_ends
+        :parameters ()
+        :precondition (and 
+            (transmit_window_open) 
+            (or 
+                (>= (orbit_time) 25)         
+                (> (orbit_index) 2)          ; just to make sure
+            )
+        )
+        :effect (not (transmit_window_open))
+    )
+
+    (:event upload_complete
+        :parameters (?r - robot)
+        :precondition (and 
+            (uploading ?r) 
+            (<= (storage_used ?r) 0)
+        )
+        :effect (and
+            (not (uploading ?r))
+            (assign (storage_used ?r) 0)
+        )
+    )
+
 )
