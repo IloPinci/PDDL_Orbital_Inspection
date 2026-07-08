@@ -6,7 +6,6 @@
         :negative-preconditions
         :numeric-fluents
         :time
-        :durative-actions
         :continuous-effects
         :disjunctive-preconditions
     )
@@ -69,11 +68,14 @@
         (max_battery_level ?r - robot)
         (max_charge_rate ?r - robot)
 
-        ; action costs
+        ; synchronizing timers
         (travel_time ?l1 ?l2 - location)
-        (movement_cost ?r - robot)  ; the movement cost is constant as it is the robots motors
-        (inspection_cost ?s - sensors)
         (inspection_time ?c - components)
+        (activity_timer ?r - robot)
+
+        ; action costs
+        (movement_cost ?r - robot)  ; the movement cost is constant as it is the robots motors
+    (inspection_cost ?s - sensors)
         (upload_cost ?r - robot)
 
         ; storage  
@@ -86,89 +88,53 @@
 
 
     ;! The movement now becomes one. The process replaces the split
-    (:durative-action move
-        :parameters (
-            ?r - robot 
-            ?now ?go - location 
+    (:action move_start
+        :parameters (?r - robot ?now ?go - location)
+        :precondition (and
+            (not (robot_disabled ?r))
+            (not (needs_inspection ?r))
+            (robot_at ?r ?now)
+            (location_reachable ?now ?go)
+            (>= (battery_level ?r) (* (travel_time ?now ?go) (movement_cost ?r)))
         )
-
-        :duration (= ?duration (travel_time ?now ?go))
-
-        :condition (and 
-            (over all (not(robot_disabled ?r)))
-
-            (at start (not (needs_inspection ?r)))
-            (at start (robot_at ?r ?now))
-            (at start (location_reachable ?now ?go))
-
-            (at start (>= (battery_level ?r) (* (travel_time ?now ?go) (movement_cost ?r))))
-        )
-        :effect (and 
-            ; update the spatial location and resources 
-            (at start (not (robot_at ?r ?now)))
-            
-            (at start (transit ?r ?now ?go))
-            
-            ; we arrive to our new location
-            (at end (robot_at ?r ?go))
-            (at end (needs_inspection ?r))
-            (at end (not (transit ?r ?now ?go)))
+        :effect (and
+            (not (robot_at ?r ?now))
+            (transit ?r ?now ?go)
+            (assign (activity_timer ?r) 0)
         )
     )
 
     ;! we inspect if the requirements of tools are met
-    (:durative-action inspect
-        :parameters (
-            ?r - robot
-            ?l - location
-            ?c - components
-            ?s - sensors
+    (:action inspect_start
+        :parameters (?r - robot ?l - location ?c - components ?s - sensors)
+        :precondition (and
+            (needs_inspection ?r)
+            (not (robot_disabled ?r))
+            (robot_at ?r ?l)
+            (component_at ?c ?l)
+            (has_sensor ?r ?s)
+            (requires_sensor ?c ?s)
+            (<= (+ (storage_used ?r) (data_size ?c)) (storage ?r))
+            (>= (battery_level ?r) (inspection_cost ?s))
         )
-        :duration (= ?duration (inspection_time ?c))
-        :condition (and 
-            (at start (needs_inspection ?r))
-
-            (over all (not(robot_disabled ?r)))
-            (over all (robot_at ?r ?l))
-            (at start (component_at ?c ?l))
-
-            (at start (has_sensor ?r ?s))
-            (at start (requires_sensor ?c ?s))
-
-            (at start (<= (+ (storage_used ?r) (data_size ?c)) (storage ?r)))
-            (at start (>= (battery_level ?r) (inspection_cost ?s)))
+        :effect (and
+            (inspecting ?r ?c ?s)
+            (assign (activity_timer ?r) 0)
         )
-        :effect (and 
-            ; we say that we are inspecting it at the start so we can drain and then we disable so the drainage stops
-            (at start (inspecting ?r ?c ?s))
-            (at end (not (inspecting ?r ?c ?s)))
-
-            (at end (data_stored ?c))
-
-            (at end (checked_component ?r ?c ?l))
-            (at end (not (needs_inspection ?r)))
-        )
-    )
-    
-    ;! We specify a wait action which allows the robot to charge. But does nothing else
-    (:durative-action wait
-        :parameters ( 
-            ?r - robot
-            ?l - location
-         )
-        :duration (and (>= ?duration 0) (<= ?duration 200))
-        :condition (and 
-            (over all (robot_at ?r ?l))
-            (over all  (not (needs_inspection ?r)))
-        )
-        :effect (and)
     )
     
 
     ;! we just pass the location without inspecting it
     (:action skip_inspection
-        :parameters (?r - robot)
-        :precondition (needs_inspection ?r)
+        :parameters (
+            ?r - robot
+            ?s - sensors
+            ?c - components
+        )
+        :precondition (and
+            (needs_inspection ?r)
+            (not (inspecting ?r ?c ?s))
+        )
         :effect (and 
             (not (needs_inspection ?r))
         )
@@ -195,6 +161,24 @@
 
     
     ;! Process
+
+    ;? clock for continuous processes
+    (:process move_clock
+        :parameters (?r - robot ?now ?go - location)
+        :precondition (transit ?r ?now ?go)
+        :effect (increase (activity_timer ?r) (* #t 1))
+    )
+
+    (:process inspect_clock
+        :parameters (?r - robot ?c - components ?s - sensors)
+        :precondition (and
+            (inspecting ?r ?c ?s)
+            (not (robot_disabled ?r))
+        )
+        :effect (increase (activity_timer ?r) (* #t 1))
+    )
+
+    
     (:process charge
         :parameters (
             ?r - robot
@@ -302,7 +286,33 @@
             (robot_disabled ?r)
         )
     )
+
+    (:event move_end
+        :parameters (?r - robot ?now ?go - location)
+        :precondition (and
+            (transit ?r ?now ?go)
+            (>= (activity_timer ?r) (travel_time ?now ?go))
+        )
+        :effect (and
+            (not (transit ?r ?now ?go))
+            (robot_at ?r ?go)
+            (needs_inspection ?r)
+        )
+    )
     
+    (:event inspect_end
+        :parameters (?r - robot ?l - location ?c - components ?s - sensors)
+        :precondition (and
+            (inspecting ?r ?c ?s)
+            (>= (activity_timer ?r) (inspection_time ?c))
+        )
+        :effect (and
+            (not (inspecting ?r ?c ?s))
+            (data_stored ?c)
+            (checked_component ?r ?c ?l)
+            (not (needs_inspection ?r))
+        )
+    )
 
     ;! global change of time 
     (:event day_ends
@@ -413,6 +423,7 @@
     (:event comm_window_starts
         :parameters ()
         :precondition (and 
+            (daytime)
             (not (transmit_window_open)) 
             (<= (orbit_index) 2)             
             (>= (orbit_time) 15)     ; we assume that the iss is above USA for 10 mins
@@ -424,6 +435,7 @@
     (:event comm_window_ends
         :parameters ()
         :precondition (and 
+            (daytime)
             (transmit_window_open) 
             (or 
                 (>= (orbit_time) 25)         
