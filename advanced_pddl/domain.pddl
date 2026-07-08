@@ -44,7 +44,7 @@
 
         ; for the processes
         (transit ?r - robot ?l1 ?l2 - location)
-        (inspecting ?r - robot ?c - components ?s - sensors)
+        (inspecting ?r - robot ?c - components ?s - sensors ?l - location)
 
         (daytime)
         (transmit_window_open)
@@ -103,6 +103,7 @@
             (not (robot_at ?r ?now))
             (transit ?r ?now ?go)
             (assign (activity_timer ?r) 0)
+            (not (uploading ?r))
         )
     )
 
@@ -121,7 +122,12 @@
 
     ;! we inspect if the requirements of tools are met
     (:action inspect_start
-        :parameters (?r - robot ?l - location ?c - components ?s - sensors)
+        :parameters (
+            ?r - robot 
+            ?l - location 
+            ?c - components 
+            ?s - sensors
+        )
         :precondition (and
             (needs_inspection ?r)
             (not (robot_disabled ?r))
@@ -133,7 +139,7 @@
             (>= (battery_level ?r) (inspection_cost ?s))
         )
         :effect (and
-            (inspecting ?r ?c ?s)
+            (inspecting ?r ?c ?s ?l)
             (assign (activity_timer ?r) 0)
         )
     )
@@ -141,11 +147,11 @@
     (:event inspect_end
         :parameters (?r - robot ?l - location ?c - components ?s - sensors)
         :precondition (and
-            (inspecting ?r ?c ?s)
+            (inspecting ?r ?c ?s ?l) 
             (>= (activity_timer ?r) (inspection_time ?c))
         )
         :effect (and
-            (not (inspecting ?r ?c ?s))
+            (not (inspecting ?r ?c ?s ?l))
             (data_stored ?c)
             (checked_component ?r ?c ?l)
             (not (needs_inspection ?r))
@@ -157,12 +163,9 @@
     (:action skip_inspection
         :parameters (
             ?r - robot
-            ?s - sensors
-            ?c - components
         )
         :precondition (and
             (needs_inspection ?r)
-            (not (inspecting ?r ?c ?s))
         )
         :effect (and 
             (not (needs_inspection ?r))
@@ -194,14 +197,17 @@
     ;? clock for continuous processes
     (:process move_clock
         :parameters (?r - robot ?now ?go - location)
-        :precondition (transit ?r ?now ?go)
+        :precondition (and 
+            (transit ?r ?now ?go)
+            (not (robot_disabled ?r))        
+        )
         :effect (increase (activity_timer ?r) (* #t 1))
     )
 
     (:process inspect_clock
-        :parameters (?r - robot ?c - components ?s - sensors)
+        :parameters (?r - robot ?c - components ?s - sensors ?l - location)
         :precondition (and
-            (inspecting ?r ?c ?s)
+            (inspecting ?r ?c ?s ?l)
             (not (robot_disabled ?r))
         )
         :effect (increase (activity_timer ?r) (* #t 1))
@@ -247,9 +253,10 @@
             ?r - robot
             ?c - components
             ?s - sensors
+            ?l - location
         )
         :precondition (and
-            (inspecting ?r ?c ?s)
+            (inspecting ?r ?c ?s ?l)
             (not (robot_disabled ?r))
         )
         :effect (and
