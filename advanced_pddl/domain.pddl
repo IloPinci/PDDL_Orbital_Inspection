@@ -55,6 +55,8 @@
     (:functions 
         (orbit_time)
         (orbit_index)
+        
+        ; how much does the angle of the sun affect the power generation
         (solar_factor)
 
         ; fraction of max_charge_rate available given current sun exposure
@@ -75,7 +77,7 @@
 
         ; action costs
         (movement_cost ?r - robot)  ; the movement cost is constant as it is the robots motors
-    (inspection_cost ?s - sensors)
+        (inspection_cost ?s - sensors)
         (upload_cost ?r - robot)
 
         ; storage  
@@ -87,7 +89,7 @@
     )
 
 
-    ;! The movement now becomes one. The process replaces the split
+    ;! Movement
     (:action move_start
         :parameters (?r - robot ?now ?go - location)
         :precondition (and
@@ -101,6 +103,19 @@
             (not (robot_at ?r ?now))
             (transit ?r ?now ?go)
             (assign (activity_timer ?r) 0)
+        )
+    )
+
+    (:event move_end
+        :parameters (?r - robot ?now ?go - location)
+        :precondition (and
+            (transit ?r ?now ?go)
+            (>= (activity_timer ?r) (travel_time ?now ?go))
+        )
+        :effect (and
+            (not (transit ?r ?now ?go))
+            (robot_at ?r ?go)
+            (needs_inspection ?r)
         )
     )
 
@@ -120,6 +135,20 @@
         :effect (and
             (inspecting ?r ?c ?s)
             (assign (activity_timer ?r) 0)
+        )
+    )
+
+    (:event inspect_end
+        :parameters (?r - robot ?l - location ?c - components ?s - sensors)
+        :precondition (and
+            (inspecting ?r ?c ?s)
+            (>= (activity_timer ?r) (inspection_time ?c))
+        )
+        :effect (and
+            (not (inspecting ?r ?c ?s))
+            (data_stored ?c)
+            (checked_component ?r ?c ?l)
+            (not (needs_inspection ?r))
         )
     )
     
@@ -178,7 +207,6 @@
         :effect (increase (activity_timer ?r) (* #t 1))
     )
 
-    
     (:process charge
         :parameters (
             ?r - robot
@@ -252,29 +280,8 @@
         )
     )
 
-    ; sunrise
-    (:process solar_intensity_rise
-        :parameters ()
-        :precondition (and 
-            (daytime) 
-            (< (orbit_time) 22.5)   ; bc the iss has 45 mins of light
-        )
-        :effect (increase (solar_factor) (* #t (/ 1 22.5))) 
-    )
-
-    ; sunset
-    (:process solar_intensity_fall
-        :parameters ()
-        :precondition (and 
-            (daytime) 
-            (>= (orbit_time) 22.5)
-        )
-        :effect (decrease (solar_factor) (* #t (/ 1 22.5)))
-    )
     
     
-    
-
     ;! Events
     (:event dead
         :parameters (?r - robot)
@@ -284,33 +291,6 @@
         :effect (and
             (assign (battery_level ?r) 0)
             (robot_disabled ?r)
-        )
-    )
-
-    (:event move_end
-        :parameters (?r - robot ?now ?go - location)
-        :precondition (and
-            (transit ?r ?now ?go)
-            (>= (activity_timer ?r) (travel_time ?now ?go))
-        )
-        :effect (and
-            (not (transit ?r ?now ?go))
-            (robot_at ?r ?go)
-            (needs_inspection ?r)
-        )
-    )
-    
-    (:event inspect_end
-        :parameters (?r - robot ?l - location ?c - components ?s - sensors)
-        :precondition (and
-            (inspecting ?r ?c ?s)
-            (>= (activity_timer ?r) (inspection_time ?c))
-        )
-        :effect (and
-            (not (inspecting ?r ?c ?s))
-            (data_stored ?c)
-            (checked_component ?r ?c ?l)
-            (not (needs_inspection ?r))
         )
     )
 
@@ -343,6 +323,129 @@
         :effect (assign (orbit_index) 0)    ; new day
     )
     
+
+    ;! DISCRETIZED SOLAR FACTOR
+
+    ;? I wanted to do the implementation with a continuous function that depends on tim. However the planner cannot handle it. I HAVE A 32 GB LAPTOP AND STILL RAN OUT OF MEMORY. 
+    ;? Hence I will discretitize it. 
+    (:event solar_rise_l1
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 2.9) 
+            (< (orbit_time) 5.9)
+            (not (= (solar_factor) 0.2))
+        )
+        :effect (assign (solar_factor) 0.2)
+    )
+    (:event solar_fall_l1
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 39.1) 
+            (< (orbit_time) 42.1)
+            (not (= (solar_factor) 0.2))
+        )
+        :effect (assign (solar_factor) 0.2)
+    )
+
+    (:event solar_rise_l2
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 5.9) 
+            (< (orbit_time) 9.2)
+            (not (= (solar_factor) 0.4))
+        )
+        :effect (assign (solar_factor) 0.4)
+    )
+    (:event solar_fall_l2
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 35.8) 
+            (< (orbit_time) 39.1)
+            (not (= (solar_factor) 0.4))
+        )
+        :effect (assign (solar_factor) 0.4)
+    )
+
+    (:event solar_rise_l3
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 9.2) 
+            (< (orbit_time) 13.3)
+            (not (= (solar_factor) 0.6))
+        )
+        :effect (assign (solar_factor) 0.6)
+    )
+    (:event solar_fall_l3
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 31.7) 
+            (< (orbit_time) 35.8)
+            (not (= (solar_factor) 0.6))
+        )
+        :effect (assign (solar_factor) 0.6)
+    )
+
+    (:event solar_rise_l4
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 13.3) 
+            (< (orbit_time) 17.5)
+            (not (= (solar_factor) 0.8))
+        )
+        :effect (assign (solar_factor) 0.8)
+    )
+    (:event solar_fall_l4
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 27.5) 
+            (< (orbit_time) 31.7)
+            (not (= (solar_factor) 0.8))
+        )
+        :effect (assign (solar_factor) 0.8)
+    )
+
+    (:event solar_peak
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 17.5) 
+            (< (orbit_time) 27.5)
+            (not (= (solar_factor) 1.0))
+        )
+        :effect (assign (solar_factor) 1.0)
+    )
+
+    ; Reset events for dawn/dusk transitions
+    (:event solar_reset_dawn
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 0) 
+            (< (orbit_time) 2.9)
+            (not (= (solar_factor) 0.0))
+        )
+        :effect (assign (solar_factor) 0.0)
+    )
+    (:event solar_reset_dusk
+        :parameters ()
+        :precondition (and 
+            (daytime) 
+            (>= (orbit_time) 42.1) 
+            (<= (orbit_time) 45.0)
+            (not (= (solar_factor) 0.0))
+        )
+        :effect (assign (solar_factor) 0.0)
+    )
+
+
 
 
     ;! Light situation for the robot
@@ -456,5 +559,4 @@
             (assign (storage_used ?r) 0)
         )
     )
-
 )
