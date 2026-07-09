@@ -1,79 +1,95 @@
-(define (problem orbital_inspection_p1)
+(define (problem p1_simple)
     (:domain orbital_inspection)
 
     (:objects
+        r1 - robot
         dock - docking
-        p1 p2 p3 - location
-        robot1 - robot
-        solar_panel antenna radiator - components
-        cam thermal hires - sensors
+        loc_a - location
+        loc_b - location
+        panel1 - components
+        panel2 - components
+        cam - sensors
+        spectro - sensors
     )
 
     (:init
-        (robot_at robot1 dock)
+        ;; simple layout: both locations directly reachable from dock,
+        ;; and from each other -- no forced relay this time
+        (robot_at r1 dock)
+        (location_reachable dock loc_a)
+        (location_reachable loc_a dock)
+        (location_reachable dock loc_b)
+        (location_reachable loc_b dock)
+        (location_reachable loc_a loc_b)
+        (location_reachable loc_b loc_a)
+        (component_at panel1 loc_a)
+        (component_at panel2 loc_b)
 
-        ; strict cycle, no shortcuts -> forces a fixed visiting order
-        (location_reachable dock p1) (location_reachable p1 dock)
-        (location_reachable p1 p2)   (location_reachable p2 p1)
-        (location_reachable p2 p3)   (location_reachable p3 p2)
-        (location_reachable p3 dock) (location_reachable dock p3)
+        ;; sensing: same two modalities, both onboard
+        (requires_sensor panel1 cam)
+        (requires_sensor panel2 spectro)
+        (has_sensor r1 cam)
+        (has_sensor r1 spectro)
 
-        (component_at solar_panel p1)
-        (component_at antenna p2)
-        (component_at radiator p3)
-
-        (requires_sensor solar_panel cam)
-        (requires_sensor antenna hires)
-        (requires_sensor radiator thermal)
-
-        (has_sensor robot1 cam)
-        (has_sensor robot1 thermal)
-        (has_sensor robot1 hires)
-
-        ; sun geometry: p2 is in the platform's own shadow
+        ;; lighting: everywhere is lit -- no shadow penalty at all
         (sun_present dock)
-        (sun_present p1)
-        (sun_present p3)
-
+        (sun_present loc_a)
+        (sun_present loc_b)
         (daytime)
-        (= (orbit_time) 0)
-        (= (sun_exposure robot1) 0)
 
-        (= (battery_level robot1) 80)
-        (= (max_battery_level robot1) 100)
-        (= (max_charge_rate robot1) 1)
+        ;; orbital clock: deploy right at solar peak, plenty of orbit
+        ;; left before day_ends, and comm window (orbit_time 15-25,
+        ;; orbit_index <= 2) is comfortably reachable from any location
+        (= (orbit_time) 10)
+        (= (orbit_index) 0)
+        (= (solar_factor) 1.0)
 
-        (= (travel_time dock p1) 5) (= (travel_time p1 dock) 5)
-        (= (travel_time p1 p2) 5)   (= (travel_time p2 p1) 5)
-        (= (travel_time p2 p3) 5)   (= (travel_time p3 p2) 5)
-        (= (travel_time p3 dock) 5) (= (travel_time dock p3) 5)
+        ;; robot state
+        (not (robot_disabled r1))
+        (not (uploading r1))
+        (= (sun_exposure r1) 2)
+        (= (activity_timer r1) 0)
 
-        (= (movement_cost robot1) 2)
+        ;; battery: generous margin, and the robot is charging the
+        ;; whole time since it's never in shade
+        (= (battery_level r1) 25)
+        (= (max_battery_level r1) 30)
+        (= (max_charge_rate r1) 6)
+        (= (movement_cost r1) 1)
 
-        (= (inspection_cost cam) 5)
-        (= (inspection_cost thermal) 10)
-        (= (inspection_cost hires) 15)
+        ;; travel: short hops, everything close to dock
+        (= (travel_time dock loc_a) 2)
+        (= (travel_time loc_a dock) 2)
+        (= (travel_time dock loc_b) 2)
+        (= (travel_time loc_b dock) 2)
+        (= (travel_time loc_a loc_b) 2)
+        (= (travel_time loc_b loc_a) 2)
 
-        (= (inspection_time solar_panel) 10)
-        (= (inspection_time antenna) 10)
-        (= (inspection_time radiator) 10)
+        ;; inspection: quick and cheap
+        (= (inspection_cost cam) 3)
+        (= (inspection_time panel1) 3)
+        (= (inspection_cost spectro) 4)
+        (= (inspection_time panel2) 3)
 
-        (= (data_size solar_panel) 5)
-        (= (data_size antenna) 8)
-        (= (data_size radiator) 10)
+        ;; data & storage: ample headroom, no mid-mission dump needed
+        (= (data_size panel1) 10)
+        (= (data_size panel2) 10)
+        (= (storage r1) 50)
+        (= (storage_used r1) 0)
 
-        (= (storage_used robot1) 0)
-        (= (storage robot1) 30)
+        ;; upload: fast, and the comm window is wide enough that the
+        ;; robot doesn't need to rush back to catch it
+        (= (upload_cost r1) 1)
+        (= (upload_rate r1) 15)
     )
 
     (:goal (and
-        (checked_component robot1 solar_panel p1)
-        (checked_component robot1 antenna p2)
-        (checked_component robot1 radiator p3)
-        (data_stored solar_panel)
-        (data_stored antenna)
-        (data_stored radiator)
-        (robot_at robot1 dock)
-        (= (storage_used robot1) 0)
+        (checked_component r1 panel1 loc_a)
+        (checked_component r1 panel2 loc_b)
+        (data_stored panel1)
+        (data_stored panel2)
+        (robot_at r1 dock)
+        (= (storage_used r1) 0)
+        (not (uploading r1))
     ))
 )
