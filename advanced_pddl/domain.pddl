@@ -35,6 +35,7 @@
         (checked_component ?r - robot ?c - components ?l - location)
         (data_stored ?c - components)
         (uploading ?r - robot)
+        (busy ?r - robot)
 
         ; locking/unlocking movement
         (needs_inspection ?r - robot)
@@ -74,6 +75,7 @@
         (travel_time ?l1 ?l2 - location)
         (inspection_time ?c - components)
         (activity_timer ?r - robot)
+        (inspection_timer ?r - robot)
 
         ; action costs
         (movement_cost ?r - robot)  ; the movement cost is constant as it is the robots motors
@@ -96,6 +98,7 @@
             (not (robot_disabled ?r))
             (not (needs_inspection ?r))
             (robot_at ?r ?now)
+            (not (busy ?r))
             (location_reachable ?now ?go)
             (>= (battery_level ?r) (* (travel_time ?now ?go) (movement_cost ?r)))
         )
@@ -132,6 +135,7 @@
             (needs_inspection ?r)
             (not (robot_disabled ?r))
             (robot_at ?r ?l)
+            (not (busy ?r))
             (component_at ?c ?l)
             (has_sensor ?r ?s)
             (requires_sensor ?c ?s)
@@ -140,7 +144,8 @@
         )
         :effect (and
             (inspecting ?r ?c ?s ?l)
-            (assign (activity_timer ?r) 0)
+            (assign (inspection_timer ?r) 0)
+            (busy ?r)
         )
     )
 
@@ -148,11 +153,13 @@
         :parameters (?r - robot ?l - location ?c - components ?s - sensors)
         :precondition (and
             (inspecting ?r ?c ?s ?l) 
-            (>= (activity_timer ?r) (inspection_time ?c))
+            (robot_at ?r ?l) 
+            (>= (inspection_timer ?r) (inspection_time ?c))
         )
         :effect (and
             (not (inspecting ?r ?c ?s ?l))
             (data_stored ?c)
+            (not (busy ?r))
             (checked_component ?r ?c ?l)
             (not (needs_inspection ?r))
         )
@@ -166,6 +173,7 @@
         )
         :precondition (and
             (needs_inspection ?r)
+            (not (busy ?r))
         )
         :effect (and 
             (not (needs_inspection ?r))
@@ -210,7 +218,7 @@
             (inspecting ?r ?c ?s ?l)
             (not (robot_disabled ?r))
         )
-        :effect (increase (activity_timer ?r) (* #t 1))
+        :effect (increase (inspection_timer ?r) (* #t 1))
     )
 
     (:process charge
@@ -335,7 +343,7 @@
 
     ;? I wanted to do the implementation with a continuous function that depends on tim. However the planner cannot handle it. I HAVE A 32 GB LAPTOP AND STILL RAN OUT OF MEMORY. 
     ;? Hence I will discretitize it. 
-    (:event solar_rise_l1
+     (:event solar_rise_l1
         :parameters ()
         :precondition (and 
             (daytime) 
@@ -548,7 +556,7 @@
             (daytime)
             (transmit_window_open) 
             (or 
-                (>= (orbit_time) 25)         
+                (>= (orbit_time) 28)         
                 (> (orbit_index) 2)          ; just to make sure
             )
         )

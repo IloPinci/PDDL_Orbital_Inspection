@@ -49,6 +49,7 @@
         (not (uploading r1))
         (= (sun_exposure r1) 2)
         (= (activity_timer r1) 0)
+        (= (inspection_timer r1) 0)
 
         ;; battery: generous margin, and the robot is charging the
         ;; whole time since it's never in shade

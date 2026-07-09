@@ -44,6 +44,7 @@
         (not (uploading r1))
         (= (sun_exposure r1) 2)
         (= (activity_timer r1) 0)
+        (= (inspection_timer r1) 0)
 
         ;; battery: has real margin only because of concurrent charging
         (= (battery_level r1) 18)
