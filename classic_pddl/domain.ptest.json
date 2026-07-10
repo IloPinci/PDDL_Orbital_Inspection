@@ -1,0 +1,18 @@
+{
+  "defaultDomain": "domain.pddl",
+  "defaultOptions": "",
+  "cases": [
+    {
+      "problem": "problem_2.pddl",
+      "expectedPlans": [
+        "problem_2.pddl_2026-07-05T18-17-47.843Z.plan"
+      ]
+    },
+    {
+      "problem": "problem_1.pddl",
+      "expectedPlans": [
+        "problem_1.pddl_2026-07-05T18-18-52.325Z.plan"
+      ]
+    }
+  ]
+}
