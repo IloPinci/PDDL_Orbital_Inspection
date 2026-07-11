@@ -309,6 +309,68 @@ both Q2 plans below. These long generated plans are not ideal but they represent
 | `p1_simple.pddl` | `dock`, `loc_a`, `loc_b` all mutually reachable, everywhere lit, `daytime` | Generous instance (battery 25/30, storage 50). The only real constraint is the **communication window**: routing and battery never bind, so the one decision that matters is *when* to be at dock so an upload can complete. |
 | `p2_hard.pddl` | Forced relay: `loc_b` reachable **only** via `loc_a` (no `dock↔loc_b` shortcut); `loc_b` in permanent shadow | Battery starts low (18/30), `loc_b` must be reached and left on a single reserve of charge, and the same recurring comm‑window gate applies - forcing the mission to be staged across multiple daily cycles. |
 
+## 3.3 Environment Topologies
+
+Each problem's spatial layout, edge costs/travel-times, and per-location
+lighting are visualised below. These are the same numbers used in the
+`:init` blocks in §3.1/§3.2-the diagrams just make the graph shape and
+where the "expensive" or "shaded" nodes sit easier to read at a glance.
+
+### Q1 - Simple (`problem_1.pddl`)
+
+<p align="center">
+  <img src="readme_assets/q1_simple.svg" alt="Q1 simple topology: dock and site_a connected by a single edge" width="400"/>
+</p>
+
+A single edge between `dock` and `site_a` (cost 10 each way), both
+sunlit, one component (`site_a`'s solar panel) requiring the `camera`
+sensor. There's no branching and no shaded edge-this is the minimal
+instance that just exercises the base move → inspect → move → upload
+loop.
+
+### Q1 - Hard (`problem_2.pddl`)
+
+<p align="center">
+  <img src="readme_assets/q1_hard.svg" alt="Q1 hard topology: star graph through hub, radiator_site shaded" width="600"/>
+</p>
+
+A star graph radiating from `hub`: `dock↔hub` (cost 10), and from `hub`
+out to `panel_site` (cost 10), `antenna_site` (cost 10), and
+`radiator_site` (cost 8-the cheapest edge, but the only shaded
+destination). `panel_site`/`antenna_site`/`radiator_site` each hold one
+component requiring a different sensor (`camera`, `highres_camera`,
+`thermal_camera` respectively). Every path to any component is forced
+through `hub`, and `radiator_site` is the one branch with no sun to
+lean on.
+
+### Q2 - Simple (`p1_simple.pddl`)
+
+<p align="center">
+  <img src="readme_assets/q2_simple.svg" alt="Q2 simple topology: dock, loc_a, loc_b fully connected, all lit" width="400"/>
+</p>
+
+`dock`, `loc_a`, and `loc_b` are all mutually reachable, each edge a
+2-minute (tick) traversal, and every location is lit. `loc_a` and
+`loc_b` each carry a solar panel needing a different sensor. With no
+shaded edges and no forced relay, routing and battery never actually
+bind-the only real constraint is timing the return to `dock` against
+the recurring communication window (see §5.1).
+
+### Q2 - Hard (`p2_hard.pddl`)
+
+<p align="center">
+  <img src="readme_assets/q2_hard.svg" alt="Q2 hard topology: dock-loc_a-loc_b relay, loc_b shaded, storage cap 40" width="500"/>
+</p>
+
+A forced relay: `dock↔loc_a` takes 4 minutes, `loc_a↔loc_b` takes 3
+minutes, and there's no direct `dock↔loc_b` edge-`loc_b` is only
+reachable by first passing through `loc_a`. `loc_b` is also
+permanently shaded, so any charging safety net has to be built up
+*before* committing to that leg. Storage cap is 40, with `panel1`
+(`loc_a`) needing 15 and `panel2` (`loc_b`) needing 20-both fit
+onboard at once, so the real bottleneck is battery reserve and comm-
+window timing rather than payload capacity (see §5.2).
+
 <div align="right"><a href="#top">↑ Back to top</a></div>
 
 ---
