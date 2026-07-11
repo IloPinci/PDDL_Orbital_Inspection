@@ -306,7 +306,7 @@ both Q2 plans below. These long generated plans are not ideal but they represent
 
 | File | Topology | Purpose |
 |---|---|---|
-| `p1_simple.pddl` | `dock`, `loc_a`, `loc_b` all mutually reachable, everywhere lit, `daytime` | Generous instance (battery 25/30, storage 50). The only real constraint is the **communication window**: routing and battery never bind, so the one decision that matters is *when* to dock so an upload can be completed. |
+| `p1_simple.pddl` | `dock`, `loc_a`, `loc_b` all mutually reachable, everywhere lit, `daytime` | Generous instance (battery 25/30, storage 50). The only real constraint is the **communication window**: routing and battery never bind, so the one decision that matters is *when* to be at dock so an upload can complete. |
 | `p2_hard.pddl` | Forced relay: `loc_b` reachable **only** via `loc_a` (no `dock↔loc_b` shortcut); `loc_b` in permanent shadow | Battery starts low (18/30), `loc_b` must be reached and left on a single reserve of charge, and the same recurring comm‑window gate applies - forcing the mission to be staged across multiple daily cycles. |
 
 <div align="right"><a href="#top">↑ Back to top</a></div>
@@ -558,9 +558,9 @@ gantt
     idle [~306s, pre-mission]        :crit, 00:00:00, 5s
     transit dock -> loc_a            :00:00:05, 4s
     skip panel1 (defer)              :milestone, 00:00:09, 0s
-    idle [~1327s, charge before shaded location] :crit, 00:00:09, 5s
+    idle [~1327s, charge before shaded leg] :crit, 00:00:09, 5s
 
-    section Shaded location (panel2)
+    section Shaded leg (panel2)
     transit loc_a -> loc_b           :00:00:14, 3s
     idle [~1435s, waiting to inspect] :crit, 00:00:17, 5s
     inspect panel2 (spectro)         :00:00:22, 5s
@@ -581,13 +581,14 @@ gantt
 
 **Reading it:** the robot visits `loc_a` **three times**. On the first
 two passes it explicitly `skip_inspection`s `panel1` and keeps going -
-first to build up charge before risking the shaded location to `loc_b`, then
+first to build up charge before risking the shaded leg to `loc_b`, then
 again on the way back so it can get `panel2`'s data to dock promptly.
-Only on the **third** visit - after a full second recharge/upload cycle it actually inspects `panel1`. The transits and inspections
+Only on the **third** visit - after a full second recharge/upload cycle
+- does it actually inspect `panel1`. The transits and inspections
 together add up to only ~31s of real activity out of 4528s total; the
 rest is the robot parked at a sunlit node waiting for `charge` and the
 day/orbit/comm-window events to run. `loc_b`'s permanent shadow means
-the shaded location has to be attempted with a pre-committed reserve rather
+the shaded leg has to be attempted with a pre-committed reserve rather
 than a background top-up, and the recurring comm-window gate (same as
 in the simple problem) forces dock arrivals to also line up with an open
 window - together these are what push the mission across multiple
