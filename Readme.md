@@ -48,6 +48,7 @@
 * [3. Problem Files](#3-problem-files)
     * [3.1 Q1 - classic_pddl/](#31-q1---classic_pddl)
     * [3.2 Q2 - advanced_pddl/](#32-q2---advanced_pddl)
+    * [3.3 Environment Topologies](#33-environment-topologies)
 * [4. Q1 Plans](#4-q1-plans)
     * [4.1 Q1 - Simple Plan](#41-q1---simple-plan-problem_1pddl)
     * [4.2 Q1 - Hard Plan](#42-q1---hard-plan-problem_2pddl)
