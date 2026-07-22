@@ -37,29 +37,34 @@
 <details>
 <summary><b>Expand Table of Contents</b></summary>
 
-* [Overview](#overview)
-* [1. Domain Schematic](#1-domain-schematic)
-    * [Objects and Types](#objects-and-types)
-    * [Mission Flow (State Machine)](#mission-flow-state-machine)
-    * [Q2 Continuous/Discrete Interaction](#q2-continuousdiscrete-interaction)
-* [2. Design Choices](#2-design-choices)
-    * [2.1 Q1 - Classic PDDL](#21-q1---classic-pddl-classic_pddldomainpddl)
-    * [2.2 Q2 - PDDL+](#22-q2---pddl-advanced_pddldomainpddl-current-version)
-* [3. Problem Files](#3-problem-files)
-    * [3.1 Q1 - classic_pddl/](#31-q1---classic_pddl)
-    * [3.2 Q2 - advanced_pddl/](#32-q2---advanced_pddl)
-    * [3.3 Environment Topologies](#33-environment-topologies)
-* [4. Q1 Plans](#4-q1-plans)
-    * [4.1 Q1 - Simple Plan](#41-q1---simple-plan-problem_1pddl)
-    * [4.2 Q1 - Hard Plan](#42-q1---hard-plan-problem_2pddl)
-* [5. Q2 Plans](#5-q2-plans)
-    * [5.1 Q2 - Simple Plan](#51-q2---simple-plan-p1_simplepddl)
-    * [5.2 Q2 - Hard Plan](#52-q2---hard-plan-p2_hardpddl)
-* [6. Technical Discussion](#6-technical-discussion)
-* [7. PDDL vs PDDL+ - Summary of Differences](#7-pddl-vs-pddl-summary-of-differences)
-* [8. Getting Started - How to Run the Planner](#8-getting-started---how-to-run-the-planner)
-    * [Q1 - Classic PDDL, via VS Code](#q1---classic-pddl-via-vs-code)
-    * [Q2 - PDDL+, via the standalone ENHSP-20 jar](#q2---pddl-via-the-standalone-enhsp-20-jar)
+- [Overview](#overview)
+- [1. Domain Schematic](#1-domain-schematic)
+  - [Objects and Types](#objects-and-types)
+  - [Mission Flow (State Machine)](#mission-flow-state-machine)
+  - [Q2 Continuous/Discrete Interaction](#q2-continuousdiscrete-interaction)
+- [2. Design Choices](#2-design-choices)
+  - [2.1 Q1 - Classic PDDL (`classic_pddl/domain.pddl`)](#21-q1---classic-pddl-classic_pddldomainpddl)
+  - [2.2 Q2 - PDDL+ (`advanced_pddl/domain.pddl`, current version)](#22-q2---pddl-advanced_pddldomainpddl-current-version)
+- [3. Problem Files](#3-problem-files)
+  - [3.1 Q1 - `classic_pddl/`](#31-q1---classic_pddl)
+  - [3.2 Q2 - `advanced_pddl/`](#32-q2---advanced_pddl)
+- [3.3 Environment Topologies](#33-environment-topologies)
+  - [Q1 - Simple (`problem_1.pddl`)](#q1---simple-problem_1pddl)
+  - [Q1 - Hard (`problem_2.pddl`)](#q1---hard-problem_2pddl)
+  - [Q2 - Simple (`p1_simple.pddl`)](#q2---simple-p1_simplepddl)
+  - [Q2 - Hard (`p2_hard.pddl`)](#q2---hard-p2_hardpddl)
+- [4. Q1 Plans](#4-q1-plans)
+  - [4.1 Q1 - Simple Plan (`problem_1.pddl`)](#41-q1---simple-plan-problem_1pddl)
+  - [4.2 Q1 - Hard Plan (`problem_2.pddl`)](#42-q1---hard-plan-problem_2pddl)
+- [5. Q2 Plans](#5-q2-plans)
+  - [5.1 Q2 - Simple Plan (`p1_simple.pddl`)](#51-q2---simple-plan-p1_simplepddl)
+  - [5.2 Q2 - Hard Plan (`p2_hard.pddl`)](#52-q2---hard-plan-p2_hardpddl)
+- [6. Technical Discussion](#6-technical-discussion)
+- [7. PDDL vs PDDL+ - Summary of Differences](#7-pddl-vs-pddl---summary-of-differences)
+- [8. Getting Started - How to Run the Planner](#8-getting-started---how-to-run-the-planner)
+  - [Q1 - Classic PDDL, via VS Code](#q1---classic-pddl-via-vs-code)
+  - [Q2 - PDDL+, via the standalone ENHSP-20 jar](#q2---pddl-via-the-standalone-enhsp-20-jar)
+- [Observation](#observation)
 
 </details>
 
@@ -824,3 +829,7 @@ java -jar enhsp-20.jar -o domain.pddl -f p2_hard.pddl -planner sat-hmrph -h hadd
 **[↑ Back to Navigation Menu](#top)**
 
 </div>
+
+## Observation
+The submitted codes and report have been thoroughly reviewed by the teaching assistant, Omar Kashmar.
+
